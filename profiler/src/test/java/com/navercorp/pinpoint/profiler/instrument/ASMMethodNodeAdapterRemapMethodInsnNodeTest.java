@@ -42,12 +42,12 @@ public class ASMMethodNodeAdapterRemapMethodInsnNodeTest {
                 List<MethodNode> methodNodes = classNode.methods;
                 for (MethodNode methodNode : methodNodes) {
                     if (methodNode.name.equals("getHeader")) {
-                        ASMMethodNodeAdapter adapter = new ASMMethodNodeAdapter(targetClassName, methodNode);
+                        ASMMethodNodeAdapter adapter = new ASMMethodNodeAdapter(classNode.name, methodNode);
 
-                        final ASMMethodInsnNodeRemapper remapper = new ASMMethodInsnNodeRemapper();
-                        remapper.addFilter(null, "__getHeader", methodNode.desc);
-                        remapper.setName("__getHeader_$$pinpoint");
-                        adapter.remapMethodInsnNode(remapper);
+                        final ASMMethodInsnNodeRemapper.Builder remapBuilder = new ASMMethodInsnNodeRemapper.Builder();
+                        remapBuilder.addFilter(null, "__getHeader", methodNode.desc);
+                        remapBuilder.setName("__getHeader_$$pinpoint");
+                        adapter.remapMethodInsnNode(remapBuilder.build());
                     }
                 }
             }
@@ -55,6 +55,5 @@ public class ASMMethodNodeAdapterRemapMethodInsnNodeTest {
         Class<?> clazz = classLoader.loadClass(targetClassName);
         Method method = clazz.getMethod("getHeader", String.class);
         final String result = (String) method.invoke(clazz.newInstance(), "bar");
-        System.out.println(result);
     }
 }

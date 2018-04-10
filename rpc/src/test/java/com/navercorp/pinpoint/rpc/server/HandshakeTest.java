@@ -22,6 +22,7 @@ import com.navercorp.pinpoint.rpc.TestAwaitUtils;
 import com.navercorp.pinpoint.rpc.client.PinpointClient;
 import com.navercorp.pinpoint.rpc.client.PinpointClientFactory;
 import com.navercorp.pinpoint.rpc.client.PinpointClientHandshaker;
+import com.navercorp.pinpoint.rpc.packet.HandshakePropertyType;
 import com.navercorp.pinpoint.rpc.util.PinpointRPCTestUtils;
 import com.navercorp.pinpoint.rpc.util.TimerFactory;
 import org.jboss.netty.util.Timer;
@@ -35,6 +36,7 @@ import org.springframework.util.SocketUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -47,7 +49,7 @@ public class HandshakeTest {
 
     private static int bindPort;
 
-    private final TestAwaitUtils awaitUtils = new TestAwaitUtils(10, 500);
+    private final TestAwaitUtils awaitUtils = new TestAwaitUtils(50, 3000);
 
 
     @BeforeClass
@@ -114,10 +116,10 @@ public class HandshakeTest {
                 }
             });
 
-            PinpointSocket writableServer = getWritableServer("application", "agent", (Long) params.get(AgentHandshakePropertyType.START_TIMESTAMP.getName()), serverAcceptor.getWritableSocketList());
+            PinpointSocket writableServer = getWritableServer("application", "agent", (Long) params.get(HandshakePropertyType.START_TIMESTAMP.getName()), serverAcceptor.getWritableSocketList());
             Assert.assertNotNull(writableServer);
 
-            writableServer = getWritableServer("application", "agent", (Long) params.get(AgentHandshakePropertyType.START_TIMESTAMP.getName()) + 1, serverAcceptor.getWritableSocketList());
+            writableServer = getWritableServer("application", "agent", (Long) params.get(HandshakePropertyType.START_TIMESTAMP.getName()) + 1, serverAcceptor.getWritableSocketList());
             Assert.assertNull(writableServer);
 
             PinpointRPCTestUtils.close(client);
@@ -132,7 +134,8 @@ public class HandshakeTest {
         int retryInterval = 100;
         int maxHandshakeCount = 10;
 
-        PinpointClientHandshaker handshaker = new PinpointClientHandshaker(timer, retryInterval, maxHandshakeCount);
+        Map<String, Object> emptyMap = Collections.emptyMap();
+        PinpointClientHandshaker handshaker = new PinpointClientHandshaker(emptyMap, timer, retryInterval, maxHandshakeCount);
         handshaker.handshakeComplete(null);
 
         Assert.assertEquals(null, handshaker.getHandshakeResult());
@@ -145,7 +148,8 @@ public class HandshakeTest {
         int retryInterval = 100;
         int maxHandshakeCount = 10;
 
-        PinpointClientHandshaker handshaker = new PinpointClientHandshaker(timer, retryInterval, maxHandshakeCount);
+        Map<String, Object> emptyMap = Collections.emptyMap();
+        PinpointClientHandshaker handshaker = new PinpointClientHandshaker(emptyMap, timer, retryInterval, maxHandshakeCount);
         handshaker.handshakeAbort();
 
         Assert.assertTrue(handshaker.isFinished());
@@ -171,15 +175,15 @@ public class HandshakeTest {
             if (writableServer instanceof  PinpointServer) {
                 Map agentProperties = ((PinpointServer)writableServer).getChannelProperties();
 
-                if (!applicationName.equals(agentProperties.get(AgentHandshakePropertyType.APPLICATION_NAME.getName()))) {
+                if (!applicationName.equals(agentProperties.get(HandshakePropertyType.APPLICATION_NAME.getName()))) {
                     continue;
                 }
 
-                if (!agentId.equals(agentProperties.get(AgentHandshakePropertyType.AGENT_ID.getName()))) {
+                if (!agentId.equals(agentProperties.get(HandshakePropertyType.AGENT_ID.getName()))) {
                     continue;
                 }
 
-                if (startTimeMillis != (Long) agentProperties.get(AgentHandshakePropertyType.START_TIMESTAMP.getName())) {
+                if (startTimeMillis != (Long) agentProperties.get(HandshakePropertyType.START_TIMESTAMP.getName())) {
                     continue;
                 }
 

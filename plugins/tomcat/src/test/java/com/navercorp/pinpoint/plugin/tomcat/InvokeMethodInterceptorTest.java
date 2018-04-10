@@ -24,9 +24,13 @@ import java.util.Enumeration;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.navercorp.pinpoint.bootstrap.config.DefaultProfilerConfig;
+import com.navercorp.pinpoint.bootstrap.config.ProfilerConfig;
 import com.navercorp.pinpoint.bootstrap.context.TraceId;
-import com.navercorp.pinpoint.profiler.context.DefaultTraceId;
+import com.navercorp.pinpoint.profiler.context.id.DefaultTraceId;
+import com.navercorp.pinpoint.profiler.context.module.DefaultApplicationContext;
 import com.navercorp.pinpoint.test.MockTraceContextFactory;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -54,6 +58,8 @@ public class InvokeMethodInterceptorTest {
 
     private final MethodDescriptor descriptor = new DefaultMethodDescriptor("org.apache.catalina.core.StandardHostValve", "invoke", new String[] {"org.apache.catalina.connector.Request", "org.apache.catalina.connector.Response"}, new String[] {"request", "response"});
 
+    private DefaultApplicationContext applicationContext;
+
     @BeforeClass
     public static void before() {
         PLoggerFactory.initialize(new Slf4jLoggerBinder());
@@ -62,12 +68,21 @@ public class InvokeMethodInterceptorTest {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
+
+        ProfilerConfig profilerConfig = new DefaultProfilerConfig();
+        applicationContext = MockTraceContextFactory.newMockApplicationContext(profilerConfig);
+        applicationContext.start();
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        if (applicationContext != null) {
+            applicationContext.close();
+        }
     }
 
     private TraceContext spyTraceContext() {
-//        return new MockTraceContext();
-        MockTraceContextFactory traceContextFactory = new MockTraceContextFactory();
-        TraceContext traceContext = traceContextFactory.create();
+        TraceContext traceContext = applicationContext.getTraceContext();
         return spy(traceContext);
     }
 

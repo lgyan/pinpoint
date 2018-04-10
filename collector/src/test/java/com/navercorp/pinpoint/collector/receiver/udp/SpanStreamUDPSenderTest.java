@@ -16,36 +16,48 @@
 
 package com.navercorp.pinpoint.collector.receiver.udp;
 
+import com.google.common.util.concurrent.MoreExecutors;
+import com.navercorp.pinpoint.bootstrap.context.TraceId;
 import com.navercorp.pinpoint.collector.TestAwaitTaskUtils;
 import com.navercorp.pinpoint.collector.TestAwaitUtils;
 import com.navercorp.pinpoint.collector.receiver.AbstractDispatchHandler;
-import com.navercorp.pinpoint.collector.receiver.DataReceiver;
-import com.navercorp.pinpoint.common.Version;
+import com.navercorp.pinpoint.collector.util.DatagramPacketFactory;
+import com.navercorp.pinpoint.collector.util.DefaultObjectPool;
+import com.navercorp.pinpoint.collector.util.ObjectPool;
+import com.navercorp.pinpoint.collector.util.ObjectPoolFactory;
 import com.navercorp.pinpoint.common.trace.ServiceType;
-import com.navercorp.pinpoint.common.util.JvmUtils;
-import com.navercorp.pinpoint.common.util.SystemPropertyKey;
-import com.navercorp.pinpoint.profiler.AgentInformation;
+import com.navercorp.pinpoint.profiler.context.SpanChunkFactoryV1;
 import com.navercorp.pinpoint.profiler.context.Span;
 import com.navercorp.pinpoint.profiler.context.SpanChunk;
 import com.navercorp.pinpoint.profiler.context.SpanChunkFactory;
 import com.navercorp.pinpoint.profiler.context.SpanEvent;
+import com.navercorp.pinpoint.profiler.context.id.DefaultTransactionIdEncoder;
+import com.navercorp.pinpoint.profiler.context.id.Shared;
+import com.navercorp.pinpoint.profiler.context.id.TraceRoot;
+import com.navercorp.pinpoint.profiler.context.id.TransactionIdEncoder;
 import com.navercorp.pinpoint.profiler.sender.SpanStreamUdpSender;
 import com.navercorp.pinpoint.thrift.dto.TResult;
 import com.navercorp.pinpoint.thrift.dto.TSpan;
 import com.navercorp.pinpoint.thrift.dto.TSpanChunk;
-import com.navercorp.pinpoint.thrift.dto.TSpanEvent;
 import org.apache.thrift.TBase;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.SocketUtils;
 
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
+
+import static org.mockito.Mockito.mock;
 
 /**
  * @author emeroad
@@ -53,7 +65,7 @@ import java.util.List;
 public class SpanStreamUDPSenderTest {
 
     private static MessageHolderDispatchHandler messageHolder;
-    private static DataReceiver receiver = null;
+    private static UDPReceiver receiver = null;
 
     private static int port;
 
@@ -63,13 +75,16 @@ public class SpanStreamUDPSenderTest {
     public static void setUp() throws IOException {
         port = SocketUtils.findAvailableUdpPort(21111);
 
-        try {
-            messageHolder = new MessageHolderDispatchHandler();
-            receiver = new TestUDPReceiver("test", new SpanStreamUDPPacketHandlerFactory<>(messageHolder, new TestTBaseFilter()), "127.0.0.1",
-                    port, 1024, 1, 10);
-            receiver.start();
-        } catch (Exception ignored) {
-        }
+        messageHolder = new MessageHolderDispatchHandler();
+
+        Executor executor = MoreExecutors.directExecutor();
+        InetSocketAddress inetSocketAddress = new InetSocketAddress("127.0.0.1", port);
+        PacketHandlerFactory<DatagramPacket> packetHandlerFactory = new SpanStreamUDPPacketHandlerFactory<>(messageHolder, new TestTBaseFilter());
+
+        ObjectPoolFactory<DatagramPacket> packetFactory = new DatagramPacketFactory();
+        ObjectPool<DatagramPacket> pool = new DefaultObjectPool<>(packetFactory, 10);
+        receiver = new UDPReceiver("test", packetHandlerFactory, executor, 1024, inetSocketAddress, pool);
+        receiver.start();
     }
 
     @AfterClass
@@ -79,14 +94,25 @@ public class SpanStreamUDPSenderTest {
         }
     }
 
+    private TraceRoot mockTraceRoot() {
+        final TraceRoot traceRoot = mock(TraceRoot.class);
+        TraceId traceId = mock(TraceId.class);
+        Mockito.when(traceRoot.getTraceId()).thenReturn(traceId);
+
+        Shared shared = mock(Shared.class);
+        Mockito.when(traceRoot.getShared()).thenReturn(shared);
+        return traceRoot;
+    }
 
     @Test
     public void sendTest1() throws InterruptedException {
         SpanStreamUdpSender sender = null;
         try {
+            final TraceRoot traceRoot = mockTraceRoot();
+
             sender = new SpanStreamUdpSender("127.0.0.1", port, "threadName", 10, 200, SpanStreamUdpSender.SEND_BUFFER_SIZE);
-            sender.send(createSpanChunk(10));
-            sender.send(createSpanChunk(3));
+            sender.send(createSpanChunk(traceRoot, 10));
+            sender.send(createSpanChunk(traceRoot, 3));
 
             awaitMessageReceived(2, messageHolder, TSpanChunk.class);
 
@@ -103,9 +129,10 @@ public class SpanStreamUDPSenderTest {
     public void sendTest2() throws InterruptedException {
         SpanStreamUdpSender sender = null;
         try {
+            final TraceRoot traceRoot = mockTraceRoot();
             sender = new SpanStreamUdpSender("127.0.0.1", port, "threadName", 10, 200, SpanStreamUdpSender.SEND_BUFFER_SIZE);
-            sender.send(createSpan(10));
-            sender.send(createSpan(3));
+            sender.send(createSpan(traceRoot, 10));
+            sender.send(createSpan(traceRoot, 3));
 
             awaitMessageReceived(2, messageHolder, TSpan.class);
 
@@ -122,10 +149,11 @@ public class SpanStreamUDPSenderTest {
     public void sendTest3() throws InterruptedException {
         SpanStreamUdpSender sender = null;
         try {
+            final TraceRoot traceRoot = mockTraceRoot();
             sender = new SpanStreamUdpSender("127.0.0.1", port, "threadName", 10, 200, SpanStreamUdpSender.SEND_BUFFER_SIZE);
-            sender.send(createSpan(10));
-            sender.send(createSpan(3));
-            sender.send(createSpanChunk(3));
+            sender.send(createSpan(traceRoot, 10));
+            sender.send(createSpan(traceRoot, 3));
+            sender.send(createSpanChunk(traceRoot, 3));
 
             awaitMessageReceived(2, messageHolder, TSpan.class);
             awaitMessageReceived(1, messageHolder, TSpanChunk.class);
@@ -139,29 +167,23 @@ public class SpanStreamUDPSenderTest {
         }
     }
 
-    private Span createSpan(int spanEventSize) throws InterruptedException {
-        AgentInformation agentInformation = new AgentInformation("agentId", "applicationName", 0, 0, "machineName", "127.0.0.1", ServiceType.STAND_ALONE,
-                JvmUtils.getSystemProperty(SystemPropertyKey.JAVA_VERSION), Version.VERSION);
-        SpanChunkFactory spanChunkFactory = new SpanChunkFactory(agentInformation);
+    private Span createSpan(TraceRoot traceRoot, int spanEventSize) throws InterruptedException {
 
-        List<SpanEvent> spanEventList = createSpanEventList(spanEventSize);
-        Span span = new Span();
+        List<SpanEvent> spanEventList = createSpanEventList(traceRoot, spanEventSize);
 
-        List<TSpanEvent> tSpanEventList = new ArrayList<>();
-        for (SpanEvent spanEvent : spanEventList) {
-            tSpanEventList.add(spanEvent);
-        }
-        span.setSpanEventList(tSpanEventList);
+        Span span = new Span(traceRoot);
+        span.setSpanEventList((List)spanEventList);
         return span;
     }
 
-    private SpanChunk createSpanChunk(int spanEventSize) throws InterruptedException {
-        AgentInformation agentInformation = new AgentInformation("agentId", "applicationName", 0, 0, "machineName", "127.0.0.1", ServiceType.STAND_ALONE,
-                JvmUtils.getSystemProperty(SystemPropertyKey.JAVA_VERSION), Version.VERSION);
-        SpanChunkFactory spanChunkFactory = new SpanChunkFactory(agentInformation);
+    private SpanChunk createSpanChunk(TraceRoot traceRoot, int spanEventSize) throws InterruptedException {
+        final String agentId = "agentId";
+        final long agentStartTime = System.currentTimeMillis();
+        final TransactionIdEncoder transactionIdEncoder = new DefaultTransactionIdEncoder(agentId, agentStartTime);
+        SpanChunkFactory spanChunkFactory = new SpanChunkFactoryV1("applicationName", agentId, agentStartTime, ServiceType.STAND_ALONE, transactionIdEncoder);
 
-        List<SpanEvent> originalSpanEventList = createSpanEventList(spanEventSize);
-        SpanChunk spanChunk = spanChunkFactory.create(originalSpanEventList);
+        List<SpanEvent> originalSpanEventList = createSpanEventList(traceRoot, spanEventSize);
+        SpanChunk spanChunk = spanChunkFactory.create(traceRoot, originalSpanEventList);
         return spanChunk;
     }
     
@@ -177,13 +199,11 @@ public class SpanStreamUDPSenderTest {
         return count;
     }
 
-    private List<SpanEvent> createSpanEventList(int size) throws InterruptedException {
-        // Span span = new SpanBo(new TSpan());
-        Span span = new Span();
+    private List<SpanEvent> createSpanEventList(TraceRoot traceRoot, int size) throws InterruptedException {
 
         List<SpanEvent> spanEventList = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
-            SpanEvent spanEvent = new SpanEvent(span);
+            SpanEvent spanEvent = new SpanEvent(traceRoot);
             spanEvent.markStartTime();
             Thread.sleep(1);
             spanEvent.markAfterTime();
@@ -234,7 +254,7 @@ public class SpanStreamUDPSenderTest {
         private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
         @Override
-        public boolean filter(TBase<?, ?> tBase, T remoteHostAddress) {
+        public boolean filter(DatagramSocket localSocket, TBase<?, ?> tBase, T remoteHostAddress) {
             logger.debug("filter");
             return false;
         }

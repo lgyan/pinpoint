@@ -1,11 +1,11 @@
-/**
+/*
  * Copyright 2014 NAVER Corp.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,27 +14,19 @@
  */
 package com.navercorp.pinpoint.bootstrap;
 
-import java.lang.instrument.Instrumentation;
-import java.net.URL;
-import java.util.List;
-import java.util.Map;
-
 import com.navercorp.pinpoint.ProductInfo;
 import com.navercorp.pinpoint.bootstrap.config.DefaultProfilerConfig;
 import com.navercorp.pinpoint.bootstrap.config.ProfilerConfig;
 import com.navercorp.pinpoint.common.Version;
-import com.navercorp.pinpoint.common.service.AnnotationKeyRegistryService;
-import com.navercorp.pinpoint.common.service.DefaultAnnotationKeyRegistryService;
-import com.navercorp.pinpoint.common.service.DefaultServiceTypeRegistryService;
-import com.navercorp.pinpoint.common.service.DefaultTraceMetadataLoaderService;
-import com.navercorp.pinpoint.common.service.ServiceTypeRegistryService;
-import com.navercorp.pinpoint.common.service.TraceMetadataLoaderService;
 import com.navercorp.pinpoint.common.util.PinpointThreadFactory;
 import com.navercorp.pinpoint.common.util.SimpleProperty;
 import com.navercorp.pinpoint.common.util.SystemProperty;
-import com.navercorp.pinpoint.common.util.logger.CommonLoggerFactory;
-import com.navercorp.pinpoint.common.util.logger.StdoutCommonLoggerFactory;
-import com.navercorp.pinpoint.exception.PinpointException;
+
+import java.lang.instrument.Instrumentation;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author Jongho Moon
@@ -44,7 +36,12 @@ class PinpointStarter {
 
     private final BootLogger logger = BootLogger.getLogger(PinpointStarter.class.getName());
 
+    public static final String AGENT_TYPE = "AGENT_TYPE";
+
+    public static final String DEFAULT_AGENT = "DEFAULT_AGENT";
     public static final String BOOT_CLASS = "com.navercorp.pinpoint.profiler.DefaultAgent";
+
+    public static final String PLUGIN_TEST_AGENT = "PLUGIN_TEST";
     public static final String PLUGIN_TEST_BOOT_CLASS = "com.navercorp.pinpoint.test.PluginTestAgent";
 
     private SimpleProperty systemProperty = SystemProperty.INSTANCE;
@@ -85,15 +82,8 @@ class PinpointStarter {
         if (applicationName == null) {
             return false;
         }
-        
-        URL[] pluginJars = classPathResolver.resolvePlugins();
 
-        // TODO using PLogger instead of CommonLogger
-        CommonLoggerFactory loggerFactory = StdoutCommonLoggerFactory.INSTANCE;
-        TraceMetadataLoaderService typeLoaderService = new DefaultTraceMetadataLoaderService(pluginJars, loggerFactory);
-        ServiceTypeRegistryService serviceTypeRegistryService  = new DefaultServiceTypeRegistryService(typeLoaderService, loggerFactory);
-        AnnotationKeyRegistryService annotationKeyRegistryService = new DefaultAnnotationKeyRegistryService(typeLoaderService, loggerFactory);
-
+        List<String> pluginJars = classPathResolver.resolvePlugins();
         String configPath = getConfigPath(classPathResolver);
         if (configPath == null) {
             return false;
@@ -116,7 +106,7 @@ class PinpointStarter {
             logger.info("pinpoint agent [" + bootClass + "] starting...");
 
 
-            AgentOption option = createAgentOption(agentId, applicationName, profilerConfig, instrumentation, pluginJars, bootstrapJarFile, serviceTypeRegistryService, annotationKeyRegistryService);
+            AgentOption option = createAgentOption(agentId, applicationName, profilerConfig, instrumentation, pluginJars, bootstrapJarFile);
             Agent pinpointAgent = agentClassLoader.boot(option);
             pinpointAgent.start();
             registerShutdownHook(pinpointAgent);
@@ -131,16 +121,16 @@ class PinpointStarter {
 
     private String getBootClass() {
         final String agentType = getAgentType().toUpperCase();
-        if ("PLUGIN_TEST".equals(agentType)) {
+        if (PLUGIN_TEST_AGENT.equals(agentType)) {
             return PLUGIN_TEST_BOOT_CLASS;
         }
         return BOOT_CLASS;
     }
 
     private String getAgentType() {
-        String agentType = agentArgs.get("AGENT_TYPE");
+        String agentType = agentArgs.get(AGENT_TYPE);
         if (agentType == null) {
-            return "DEFAULT_AGENT";
+            return DEFAULT_AGENT;
         }
         return agentType;
 
@@ -148,12 +138,10 @@ class PinpointStarter {
 
     private AgentOption createAgentOption(String agentId, String applicationName, ProfilerConfig profilerConfig,
                                           Instrumentation instrumentation,
-                                          URL[] pluginJars,
-                                          BootstrapJarFile bootstrapJarFile,
-                                          ServiceTypeRegistryService serviceTypeRegistryService,
-                                          AnnotationKeyRegistryService annotationKeyRegistryService) {
+                                          List<String> pluginJars,
+                                          BootstrapJarFile bootstrapJarFile) {
         List<String> bootstrapJarPaths = bootstrapJarFile.getJarNameList();
-        return new DefaultAgentOption(instrumentation, agentId, applicationName, profilerConfig, pluginJars, bootstrapJarPaths, serviceTypeRegistryService, annotationKeyRegistryService);
+        return new DefaultAgentOption(instrumentation, agentId, applicationName, profilerConfig, pluginJars, bootstrapJarPaths);
     }
 
     // for test
@@ -168,7 +156,7 @@ class PinpointStarter {
                 pinpointAgent.stop();
             }
         };
-        PinpointThreadFactory pinpointThreadFactory = new PinpointThreadFactory("Pinpoint-shutdown-hook");
+        PinpointThreadFactory pinpointThreadFactory = new PinpointThreadFactory("Pinpoint-shutdown-hook", false);
         Thread thread = pinpointThreadFactory.newThread(stop);
         Runtime.getRuntime().addShutdownHook(thread);
     }
@@ -196,7 +184,7 @@ class PinpointStarter {
 
         String classPathAgentConfigPath = classPathResolver.getAgentConfigPath();
         if (classPathAgentConfigPath != null) {
-            logger.info("classpath " + configName +  " found. " + classPathAgentConfigPath);
+            logger.info("classpath " + configName + " found. " + classPathAgentConfigPath);
             return classPathAgentConfigPath;
         }
 
@@ -205,11 +193,11 @@ class PinpointStarter {
     }
 
 
-    private List<URL> resolveLib(ClassPathResolver classPathResolver)  {
+    private List<URL> resolveLib(ClassPathResolver classPathResolver) {
         // this method may handle only absolute path,  need to handle relative path (./..agentlib/lib)
         String agentJarFullPath = classPathResolver.getAgentJarFullPath();
         String agentLibPath = classPathResolver.getAgentLibPath();
-        List<URL> urlList = classPathResolver.resolveLib();
+        List<URL> urlList = resolveLib(classPathResolver.resolveLib());
         String agentConfigPath = classPathResolver.getAgentConfigPath();
 
         if (logger.isInfoEnabled()) {
@@ -222,6 +210,23 @@ class PinpointStarter {
         }
 
         return urlList;
+    }
+
+    private List<URL> resolveLib(List<URL> urlList) {
+        if (DEFAULT_AGENT.equals(getAgentType().toUpperCase())) {
+            final List<URL> releaseLib = new ArrayList<URL>(urlList.size());
+            for (URL url : urlList) {
+                //
+                if (!url.toExternalForm().contains("pinpoint-profiler-test")) {
+                    releaseLib.add(url);
+                }
+            }
+            return releaseLib;
+        } else {
+            logger.info("load " + PLUGIN_TEST_AGENT + " lib");
+            // plugin test
+            return urlList;
+        }
     }
 
 }

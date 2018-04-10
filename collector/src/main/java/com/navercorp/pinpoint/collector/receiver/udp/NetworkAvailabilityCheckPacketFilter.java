@@ -20,7 +20,6 @@ import com.navercorp.pinpoint.thrift.io.NetworkAvailabilityCheckPacket;
 import org.apache.thrift.TBase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.DisposableBean;
 
 import java.io.IOException;
 import java.net.*;
@@ -28,34 +27,26 @@ import java.net.*;
 /**
  * @author emeroad
  */
-public class NetworkAvailabilityCheckPacketFilter<T extends SocketAddress> implements TBaseFilter<T>, DisposableBean {
+public class NetworkAvailabilityCheckPacketFilter<T extends SocketAddress> implements TBaseFilter<T> {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    private final DatagramSocket socket;
-
     public NetworkAvailabilityCheckPacketFilter() {
-        try {
-            this.socket = new DatagramSocket();
-            logger.info("port:{}", this.socket.getLocalAddress());
-        } catch (SocketException ex) {
-            throw new RuntimeException("socket create fail. error:" + ex.getMessage(), ex);
-        }
     }
 
     @Override
-    public boolean filter(TBase<?, ?> tBase, T remoteHostAddress) {
+    public boolean filter(DatagramSocket localSocket, TBase<?, ?> tBase, T remoteHostAddress) {
         // Network port availability check packet
         if (tBase instanceof NetworkAvailabilityCheckPacket) {
             if (logger.isInfoEnabled()) {
                 logger.info("received udp network availability check packet. remoteAddress:{}", remoteHostAddress);
             }
-            responseOK(remoteHostAddress);
+            responseOK(localSocket, remoteHostAddress);
             return BREAK;
         }
         return CONTINUE;
     }
 
-    private void responseOK(T remoteHostAddress) {
+    private void responseOK(DatagramSocket socket, T remoteHostAddress) {
         try {
             byte[] okBytes = NetworkAvailabilityCheckPacket.DATA_OK;
             DatagramPacket pongPacket = new DatagramPacket(okBytes, okBytes.length, remoteHostAddress);
@@ -68,14 +59,5 @@ public class NetworkAvailabilityCheckPacketFilter<T extends SocketAddress> imple
     }
 
 
-    @Override
-    public void destroy() throws Exception {
-        if (socket!= null) {
-            try {
-                socket.close();
-            } catch (Exception e) {
-                logger.warn("socket.close() error:" + e.getMessage(), e);
-            }
-        }
-    }
+
 }

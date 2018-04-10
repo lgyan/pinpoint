@@ -71,11 +71,7 @@ public class ResponseTime {
         if (agentId == null) {
             throw new NullPointerException("agentId must not be null");
         }
-        TimeHistogram histogram = responseHistogramMap.get(agentId);
-        if (histogram == null) {
-            histogram = new TimeHistogram(applicationServiceType, timeStamp);
-            responseHistogramMap.put(agentId, histogram);
-        }
+        TimeHistogram histogram = responseHistogramMap.computeIfAbsent(agentId, k -> new TimeHistogram(applicationServiceType, timeStamp));
         return histogram;
     }
 
@@ -116,12 +112,12 @@ public class ResponseTime {
 
     @Override
     public String toString() {
-        return "ResponseTime{" +
-                "applicationName='" + applicationName + '\'' +
-                ", applicationServiceType=" + applicationServiceType +
-                ", timeStamp=" + timeStamp +
-                ", responseHistogramMap=" + responseHistogramMap +
-                '}';
+        final StringBuilder sb = new StringBuilder("ResponseTime{");
+        sb.append("applicationName='").append(applicationName).append('\'');
+        sb.append(", applicationServiceType=").append(applicationServiceType);
+        sb.append(", timeStamp=").append(timeStamp);
+        sb.append(", responseHistogramMap=").append(responseHistogramMap);
+        sb.append('}');
+        return sb.toString();
     }
-
 }

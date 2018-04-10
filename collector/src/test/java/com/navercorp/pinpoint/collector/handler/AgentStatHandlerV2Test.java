@@ -16,32 +16,42 @@
 
 package com.navercorp.pinpoint.collector.handler;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
-
-import java.util.ArrayList;
-import java.util.List;
-
+import com.navercorp.pinpoint.collector.dao.AgentStatDaoV2;
 import com.navercorp.pinpoint.collector.mapper.thrift.stat.AgentStatBatchMapper;
 import com.navercorp.pinpoint.collector.mapper.thrift.stat.AgentStatMapper;
+import com.navercorp.pinpoint.collector.service.AgentStatService;
+import com.navercorp.pinpoint.collector.service.HBaseAgentStatService;
 import com.navercorp.pinpoint.common.server.bo.stat.ActiveTraceBo;
 import com.navercorp.pinpoint.common.server.bo.stat.AgentStatBo;
 import com.navercorp.pinpoint.common.server.bo.stat.CpuLoadBo;
+import com.navercorp.pinpoint.common.server.bo.stat.DataSourceListBo;
+import com.navercorp.pinpoint.common.server.bo.stat.DeadlockBo;
 import com.navercorp.pinpoint.common.server.bo.stat.JvmGcBo;
 import com.navercorp.pinpoint.common.server.bo.stat.JvmGcDetailedBo;
+import com.navercorp.pinpoint.common.server.bo.stat.ResponseTimeBo;
 import com.navercorp.pinpoint.common.server.bo.stat.TransactionBo;
+import com.navercorp.pinpoint.common.server.bo.stat.FileDescriptorBo;
+import com.navercorp.pinpoint.thrift.dto.TAgentInfo;
+import com.navercorp.pinpoint.thrift.dto.TAgentStat;
+import com.navercorp.pinpoint.thrift.dto.TAgentStatBatch;
+import com.navercorp.pinpoint.thrift.dto.TCpuLoad;
+import com.navercorp.pinpoint.thrift.dto.TDataSourceList;
+import com.navercorp.pinpoint.thrift.dto.TDeadlock;
+import com.navercorp.pinpoint.thrift.dto.TJvmGc;
+import com.navercorp.pinpoint.thrift.dto.TResponseTime;
+import com.navercorp.pinpoint.thrift.dto.TFileDescriptor;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
 
-import com.navercorp.pinpoint.collector.dao.AgentStatDaoV2;
-import com.navercorp.pinpoint.thrift.dto.TAgentInfo;
-import com.navercorp.pinpoint.thrift.dto.TAgentStat;
-import com.navercorp.pinpoint.thrift.dto.TAgentStatBatch;
-import com.navercorp.pinpoint.thrift.dto.TCpuLoad;
-import com.navercorp.pinpoint.thrift.dto.TJvmGc;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.*;
 
 /**
  * @author HyunGil Jeong
@@ -69,11 +79,30 @@ public class AgentStatHandlerV2Test {
     @Mock
     private AgentStatDaoV2<ActiveTraceBo> activeTraceDao;
 
+    @Mock
+    private AgentStatDaoV2<DataSourceListBo> dataSourceDao;
+
+    @Mock
+    private AgentStatDaoV2<ResponseTimeBo> responseTimeDao;
+
+    @Mock
+    private AgentStatDaoV2<DeadlockBo> deadlockDao;
+
+    @Mock
+    private AgentStatDaoV2<FileDescriptorBo> fileDescriptorDao;
+
+    @InjectMocks
+    private HBaseAgentStatService hBaseAgentStatService = new HBaseAgentStatService();
+
+    @Spy
+    private List<AgentStatService> agentStatServiceList = new ArrayList<>();
+
     @InjectMocks
     private AgentStatHandlerV2 agentStatHandler = new AgentStatHandlerV2();
 
     @Before
     public void setUp() throws Exception {
+        agentStatServiceList.add(hBaseAgentStatService);
         MockitoAnnotations.initMocks(this);
     }
 
@@ -86,13 +115,18 @@ public class AgentStatHandlerV2Test {
         final AgentStatBo mappedAgentStat = new AgentStatBo();
         when(this.agentStatMapper.map(agentStat)).thenReturn(mappedAgentStat);
         // When
-        agentStatHandler.handle(agentStat);
+        agentStatHandler.handleSimple(agentStat);
         // Then
         verify(jvmGcDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getJvmGcBos());
         verify(jvmGcDetailedDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getJvmGcDetailedBos());
         verify(cpuLoadDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getCpuLoadBos());
         verify(transactionDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getTransactionBos());
         verify(activeTraceDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getActiveTraceBos());
+        verify(dataSourceDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getDataSourceListBos());
+        verify(responseTimeDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getResponseTimeBos());
+        verify(deadlockDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getDeadlockBos());
+        verify(fileDescriptorDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getFileDescriptorBos());
+
     }
 
     @Test
@@ -105,13 +139,17 @@ public class AgentStatHandlerV2Test {
         final AgentStatBo mappedAgentStat = new AgentStatBo();
         when(this.agentStatBatchMapper.map(agentStatBatch)).thenReturn(mappedAgentStat);
         // When
-        agentStatHandler.handle(agentStatBatch);
+        agentStatHandler.handleSimple(agentStatBatch);
         // Then
         verify(jvmGcDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getJvmGcBos());
         verify(jvmGcDetailedDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getJvmGcDetailedBos());
         verify(cpuLoadDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getCpuLoadBos());
         verify(transactionDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getTransactionBos());
         verify(activeTraceDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getActiveTraceBos());
+        verify(dataSourceDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getDataSourceListBos());
+        verify(responseTimeDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getResponseTimeBos());
+        verify(deadlockDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getDeadlockBos());
+        verify(fileDescriptorDao).insert(mappedAgentStat.getAgentId(), mappedAgentStat.getFileDescriptorBos());
     }
 
     @Test
@@ -123,13 +161,16 @@ public class AgentStatHandlerV2Test {
         final AgentStatBo mappedAgentStat = null;
         when(this.agentStatMapper.map(agentStat)).thenReturn(mappedAgentStat);
         // When
-        agentStatHandler.handle(agentStat);
+        agentStatHandler.handleSimple(agentStat);
         // Then
         verifyZeroInteractions(jvmGcDao);
         verifyZeroInteractions(jvmGcDetailedDao);
         verifyZeroInteractions(cpuLoadDao);
         verifyZeroInteractions(transactionDao);
         verifyZeroInteractions(activeTraceDao);
+        verifyZeroInteractions(dataSourceDao);
+        verifyZeroInteractions(responseTimeDao);
+        verifyZeroInteractions(fileDescriptorDao);
     }
 
     @Test
@@ -142,13 +183,16 @@ public class AgentStatHandlerV2Test {
         final AgentStatBo mappedAgentStat = null;
         when(this.agentStatBatchMapper.map(agentStatBatch)).thenReturn(mappedAgentStat);
         // When
-        agentStatHandler.handle(agentStatBatch);
+        agentStatHandler.handleSimple(agentStatBatch);
         // Then
         verifyZeroInteractions(jvmGcDao);
         verifyZeroInteractions(jvmGcDetailedDao);
         verifyZeroInteractions(cpuLoadDao);
         verifyZeroInteractions(transactionDao);
         verifyZeroInteractions(activeTraceDao);
+        verifyZeroInteractions(dataSourceDao);
+        verifyZeroInteractions(responseTimeDao);
+        verifyZeroInteractions(fileDescriptorDao);
     }
 
     @Test(expected=IllegalArgumentException.class)
@@ -156,7 +200,7 @@ public class AgentStatHandlerV2Test {
         // Given
         final TAgentInfo wrongTBaseObject = new TAgentInfo();
         // When
-        agentStatHandler.handle(wrongTBaseObject);
+        agentStatHandler.handleSimple(wrongTBaseObject);
         // Then
         fail();
     }
@@ -166,7 +210,7 @@ public class AgentStatHandlerV2Test {
         agentStatBatch.setAgentId(agentId);
         agentStatBatch.setStartTimestamp(startTimestamp);
         final List<TAgentStat> agentStats = new ArrayList<>(numBatches);
-        for (int i = 0; i < numBatches; ++i) {
+        for (int i = 0; i < numBatches; i++) {
             agentStats.add(createAgentStat(agentId, startTimestamp));
         }
         agentStatBatch.setAgentStats(agentStats);
@@ -179,6 +223,10 @@ public class AgentStatHandlerV2Test {
         agentStat.setStartTimestamp(startTimestamp);
         agentStat.setGc(new TJvmGc());
         agentStat.setCpuLoad(new TCpuLoad());
+        agentStat.setDataSourceList(new TDataSourceList());
+        agentStat.setResponseTime(new TResponseTime());
+        agentStat.setDeadlock(new TDeadlock());
+        agentStat.setFileDescriptor(new TFileDescriptor());
         return agentStat;
     }
 

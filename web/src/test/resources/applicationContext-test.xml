@@ -44,8 +44,6 @@
     <import resource="classpath:applicationContext-dao-config.xml" />
     <import resource="classpath:batch/applicationContext-batch.xml" />
 
-    <bean id="spanMapper" class="com.navercorp.pinpoint.web.mapper.SpanMapper"/>
-
     <bean id="jsonObjectMapper" class="com.fasterxml.jackson.databind.ObjectMapper"/>
 
     <bean id="rangeFactory" class="com.navercorp.pinpoint.web.vo.RangeFactory"/>
@@ -57,11 +55,9 @@
     <bean id="config" class="com.navercorp.pinpoint.web.config.WebConfig"/>
     
     <bean id="commandHeaderTBaseSerializerFactory" class="com.navercorp.pinpoint.thrift.io.CommandHeaderTBaseSerializerFactory">
-    	<constructor-arg value="#{T(com.navercorp.pinpoint.common.Version).VERSION}" />
     </bean>
 
     <bean id="commandHeaderTBaseDeserializerFactory" class="com.navercorp.pinpoint.thrift.io.CommandHeaderTBaseDeserializerFactory">
-    	<constructor-arg value="#{T(com.navercorp.pinpoint.common.Version).VERSION}" />
     </bean>
     
     <bean id="pinpointSocketManager" class="com.navercorp.pinpoint.web.server.PinpointSocketManager">

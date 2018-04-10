@@ -19,17 +19,16 @@ package com.navercorp.pinpoint.profiler.sender;
 import com.navercorp.pinpoint.profiler.TestAwaitTaskUtils;
 import com.navercorp.pinpoint.profiler.TestAwaitUtils;
 import com.navercorp.pinpoint.rpc.PinpointSocket;
-import com.navercorp.pinpoint.rpc.client.PinpointClient;
+import com.navercorp.pinpoint.rpc.client.DefaultPinpointClientFactory;
 import com.navercorp.pinpoint.rpc.client.PinpointClientFactory;
 import com.navercorp.pinpoint.rpc.packet.HandshakeResponseCode;
 import com.navercorp.pinpoint.rpc.packet.HandshakeResponseType;
-import com.navercorp.pinpoint.rpc.packet.PingPacket;
+import com.navercorp.pinpoint.rpc.packet.PingPayloadPacket;
 import com.navercorp.pinpoint.rpc.packet.RequestPacket;
 import com.navercorp.pinpoint.rpc.packet.SendPacket;
 import com.navercorp.pinpoint.rpc.server.PinpointServer;
 import com.navercorp.pinpoint.rpc.server.PinpointServerAcceptor;
 import com.navercorp.pinpoint.rpc.server.ServerMessageListener;
-import com.navercorp.pinpoint.rpc.util.ClientFactoryUtils;
 import com.navercorp.pinpoint.thrift.dto.TApiMetaData;
 import org.junit.Assert;
 import org.junit.Test;
@@ -60,13 +59,13 @@ public class TcpDataSenderReconnectTest {
 
             @Override
             public void handleSend(SendPacket sendPacket, PinpointSocket pinpointSocket) {
-                logger.info("handleSend packet:{}, remote:{}", sendPacket, pinpointSocket.getRemoteAddress());
+                logger.debug("handleSend packet:{}, remote:{}", sendPacket, pinpointSocket.getRemoteAddress());
                 send++;
             }
 
             @Override
             public void handleRequest(RequestPacket requestPacket, PinpointSocket pinpointSocket) {
-                logger.info("handleRequest packet:{}, remote:{}", requestPacket, pinpointSocket.getRemoteAddress());
+                logger.debug("handleRequest packet:{}, remote:{}", requestPacket, pinpointSocket.getRemoteAddress());
             }
 
             @Override
@@ -75,8 +74,8 @@ public class TcpDataSenderReconnectTest {
             }
 
             @Override
-            public void handlePing(PingPacket pingPacket, PinpointServer pinpointServer) {
-                logger.info("ping received {} {} ", pingPacket, pinpointServer);
+            public void handlePing(PingPayloadPacket pingPacket, PinpointServer pinpointServer) {
+                logger.debug("ping received packet:{}, remote:{}", pingPacket, pinpointServer);
             }
         });
         serverAcceptor.bind(HOST, PORT);
@@ -89,43 +88,41 @@ public class TcpDataSenderReconnectTest {
         PinpointServerAcceptor oldAcceptor = serverAcceptorStart();
 
         PinpointClientFactory clientFactory = createPinpointClientFactory();
-        PinpointClient client = ClientFactoryUtils.createPinpointClient(HOST, PORT, clientFactory);
 
-        TcpDataSender sender = new TcpDataSender(client);
+        TcpDataSender sender = new TcpDataSender(this.getClass().getName(), HOST, PORT, clientFactory);
         waitClientConnected(oldAcceptor);
 
         oldAcceptor.close();
-        waitClientDisconnected(client);
+        waitClientDisconnected(sender);
 
-        logger.info("Server start------------------");
+        logger.debug("Server start------------------");
         PinpointServerAcceptor serverAcceptor = serverAcceptorStart();
         waitClientConnected(serverAcceptor);
 
-        logger.info("sendMessage------------------");
+        logger.debug("sendMessage------------------");
         sender.send(new TApiMetaData("test", System.currentTimeMillis(), 1, "TestApi"));
 
         Thread.sleep(500);
-        logger.info("sender stop------------------");
+        logger.debug("sender stop------------------");
         sender.stop();
 
         serverAcceptor.close();
-        client.close();
         clientFactory.release();
     }
     
     private PinpointClientFactory createPinpointClientFactory() {
-        PinpointClientFactory clientFactory = new PinpointClientFactory();
+        PinpointClientFactory clientFactory = new DefaultPinpointClientFactory();
         clientFactory.setTimeoutMillis(1000 * 5);
         clientFactory.setProperties(Collections.EMPTY_MAP);
 
         return clientFactory;
     }
 
-    private void waitClientDisconnected(final PinpointClient client) {
+    private void waitClientDisconnected(final TcpDataSender sender) {
         boolean pass = awaitUtils.await(new TestAwaitTaskUtils() {
             @Override
             public boolean checkCompleted() {
-                return !client.isConnected();
+                return !sender.isConnected();
             }
         });
 

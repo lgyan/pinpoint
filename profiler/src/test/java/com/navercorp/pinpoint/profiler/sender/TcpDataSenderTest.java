@@ -17,13 +17,16 @@
 package com.navercorp.pinpoint.profiler.sender;
 
 import com.navercorp.pinpoint.rpc.PinpointSocket;
-import com.navercorp.pinpoint.rpc.client.PinpointClient;
+import com.navercorp.pinpoint.rpc.client.DefaultPinpointClientFactory;
 import com.navercorp.pinpoint.rpc.client.PinpointClientFactory;
-import com.navercorp.pinpoint.rpc.packet.*;
+import com.navercorp.pinpoint.rpc.packet.HandshakeResponseCode;
+import com.navercorp.pinpoint.rpc.packet.HandshakeResponseType;
+import com.navercorp.pinpoint.rpc.packet.PingPayloadPacket;
+import com.navercorp.pinpoint.rpc.packet.RequestPacket;
+import com.navercorp.pinpoint.rpc.packet.SendPacket;
 import com.navercorp.pinpoint.rpc.server.PinpointServer;
 import com.navercorp.pinpoint.rpc.server.PinpointServerAcceptor;
 import com.navercorp.pinpoint.rpc.server.ServerMessageListener;
-import com.navercorp.pinpoint.rpc.util.ClientFactoryUtils;
 import com.navercorp.pinpoint.thrift.dto.TApiMetaData;
 import org.junit.After;
 import org.junit.Assert;
@@ -58,7 +61,7 @@ public class TcpDataSenderTest {
 
             @Override
             public void handleSend(SendPacket sendPacket, PinpointSocket pinpointSocket) {
-                logger.info("handleSend packet:{}, remote:{}", sendPacket, pinpointSocket.getRemoteAddress());
+                logger.debug("handleSend packet:{}, remote:{}", sendPacket, pinpointSocket.getRemoteAddress());
                 if (sendLatch != null) {
                     sendLatch.countDown();
                 }
@@ -66,7 +69,7 @@ public class TcpDataSenderTest {
 
             @Override
             public void handleRequest(RequestPacket requestPacket, PinpointSocket pinpointSocket) {
-                logger.info("handleRequest packet:{}, remote:{}", requestPacket, pinpointSocket.getRemoteAddress());
+                logger.debug("handleRequest packet:{}, remote:{}", requestPacket, pinpointSocket.getRemoteAddress());
             }
 
             @Override
@@ -75,8 +78,8 @@ public class TcpDataSenderTest {
             }
 
             @Override
-            public void handlePing(PingPacket pingPacket, PinpointServer pinpointServer) {
-                logger.info("ping received {} {} ", pingPacket, pinpointServer);
+            public void handlePing(PingPayloadPacket pingPacket, PinpointServer pinpointServer) {
+                logger.debug("ping received packet:{}, remote:{}", pingPacket, pinpointServer);
             }
         });
         serverAcceptor.bind(HOST, PORT);
@@ -94,10 +97,8 @@ public class TcpDataSenderTest {
         this.sendLatch = new CountDownLatch(2);
 
         PinpointClientFactory clientFactory = createPinpointClientFactory();
-        
-        PinpointClient client = ClientFactoryUtils.createPinpointClient(HOST, PORT, clientFactory);
-        
-        TcpDataSender sender = new TcpDataSender(client);
+
+        TcpDataSender sender = new TcpDataSender(this.getClass().getName(), HOST, PORT, clientFactory);
         try {
             sender.send(new TApiMetaData("test", System.currentTimeMillis(), 1, "TestApi"));
             sender.send(new TApiMetaData("test", System.currentTimeMillis(), 1, "TestApi"));
@@ -108,10 +109,6 @@ public class TcpDataSenderTest {
         } finally {
             sender.stop();
             
-            if (client != null) {
-                client.close();
-            }
-            
             if (clientFactory != null) {
                 clientFactory.release();
             }
@@ -119,9 +116,9 @@ public class TcpDataSenderTest {
     }
     
     private PinpointClientFactory createPinpointClientFactory() {
-        PinpointClientFactory clientFactory = new PinpointClientFactory();
+        PinpointClientFactory clientFactory = new DefaultPinpointClientFactory();
         clientFactory.setTimeoutMillis(1000 * 5);
-        clientFactory.setProperties(Collections.EMPTY_MAP);
+        clientFactory.setProperties(Collections.<String, Object>emptyMap());
 
         return clientFactory;
     }

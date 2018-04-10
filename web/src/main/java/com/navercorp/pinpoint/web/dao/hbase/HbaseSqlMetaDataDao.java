@@ -18,8 +18,10 @@ package com.navercorp.pinpoint.web.dao.hbase;
 
 import java.util.List;
 
+import com.navercorp.pinpoint.common.hbase.TableNameProvider;
 import com.sematext.hbase.wd.RowKeyDistributorByHashPrefix;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Get;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -39,6 +41,9 @@ public class HbaseSqlMetaDataDao implements SqlMetaDataDao {
     @Autowired
     private HbaseOperations2 hbaseOperations2;
 
+    @Autowired
+    private TableNameProvider tableNameProvider;
+
 //    @Autowired
 //    @Qualifier("sqlMetaDataMapper")
     private RowMapper<List<SqlMetaDataBo>> sqlMetaDataMapper;
@@ -48,18 +53,19 @@ public class HbaseSqlMetaDataDao implements SqlMetaDataDao {
     private RowKeyDistributorByHashPrefix rowKeyDistributorByHashPrefix;
 
     @Override
-    public List<SqlMetaDataBo> getSqlMetaData(String agentId, long time, int hashCode) {
+    public List<SqlMetaDataBo> getSqlMetaData(String agentId, long time, int sqlId) {
         if (agentId == null) {
             throw new NullPointerException("agentId must not be null");
         }
 
-        SqlMetaDataBo sqlMetaData = new SqlMetaDataBo(agentId, time, hashCode);
-        byte[] sqlId = getDistributedKey(sqlMetaData.toRowKey());
+        SqlMetaDataBo sqlMetaData = new SqlMetaDataBo(agentId, time, sqlId);
+        byte[] rowKey = getDistributedKey(sqlMetaData.toRowKey());
 
-        Get get = new Get(sqlId);
+        Get get = new Get(rowKey);
         get.addFamily(HBaseTables.SQL_METADATA_VER2_CF_SQL);
 
-        return hbaseOperations2.get(HBaseTables.SQL_METADATA_VER2, get, sqlMetaDataMapper);
+        TableName sqlMetaDataTableName = tableNameProvider.getTableName(HBaseTables.SQL_METADATA_VER2_STR);
+        return hbaseOperations2.get(sqlMetaDataTableName, get, sqlMetaDataMapper);
     }
 
     private byte[] getDistributedKey(byte[] rowKey) {

@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2014 NAVER Corp.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,7 +91,7 @@ public class ServiceTypeInitializerTest {
                 new TestProvider(new ServiceType[0], TEST_KEYS)
         );
 
-        TraceMetadataLoader loader = new TraceMetadataLoader();
+        TraceMetadataLoader loader = new TraceMetadataLoader(StdoutCommonLoggerFactory.INSTANCE);
         loader.load(providers);
     }
     
@@ -102,7 +102,7 @@ public class ServiceTypeInitializerTest {
                 new TestProvider(TEST_TYPES, new AnnotationKey[0])
         );
 
-        TraceMetadataLoader loader = new TraceMetadataLoader();
+        TraceMetadataLoader loader = new TraceMetadataLoader(StdoutCommonLoggerFactory.INSTANCE);
         loader.load(providers);
     }
     
@@ -113,7 +113,7 @@ public class ServiceTypeInitializerTest {
                 new TestProvider(TEST_TYPES, new AnnotationKey[0])
         );
 
-        TraceMetadataLoader loader = new TraceMetadataLoader();
+        TraceMetadataLoader loader = new TraceMetadataLoader(StdoutCommonLoggerFactory.INSTANCE);
         loader.load(providers);
     }
 
@@ -145,7 +145,6 @@ public class ServiceTypeInitializerTest {
 
         TraceMetadataLoaderService loaderService = new DefaultTraceMetadataLoaderService(providers, loggerFactory);
         AnnotationKeyRegistryService annotationKeyRegistryService = new DefaultAnnotationKeyRegistryService(loaderService, loggerFactory);
-
     }
     
     

@@ -15,14 +15,22 @@
  */
 package com.navercorp.pinpoint.profiler.instrument;
 
+import com.navercorp.pinpoint.bootstrap.instrument.InstrumentContext;
+import com.navercorp.pinpoint.profiler.util.JavaAssistUtils;
+import org.junit.Before;
 import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.util.CheckClassAdapter;
 
-import java.io.PrintWriter;
+import java.io.InputStream;
 import java.lang.reflect.Method;
+
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * @author jaehong.kim
@@ -40,6 +48,37 @@ public class ASMAspectWeaverTest {
     private final String ERROR_ASPECT2 = "com.navercorp.pinpoint.profiler.instrument.mock.AspectInterceptorError2Class";
 
     private final String ERROR_ASPECT_INVALID_EXTENTS = "com.navercorp.pinpoint.profiler.instrument.mock.AspectInterceptorInvalidExtendClass";
+
+    private final InstrumentContext pluginContext = mock(InstrumentContext.class);
+
+    @Before
+    public void setUp() {
+
+        when(pluginContext.injectClass(any(ClassLoader.class), any(String.class))).thenAnswer(new Answer<Class<?>>() {
+
+            @Override
+            public Class<?> answer(InvocationOnMock invocation) throws Throwable {
+                ClassLoader loader = (ClassLoader) invocation.getArguments()[0];
+                String name = (String) invocation.getArguments()[1];
+
+                return loader.loadClass(name);
+            }
+
+        });
+        when(pluginContext.getResourceAsStream(any(ClassLoader.class), any(String.class))).thenAnswer(new Answer<InputStream>() {
+
+            @Override
+            public InputStream answer(InvocationOnMock invocation) throws Throwable {
+                ClassLoader loader = (ClassLoader) invocation.getArguments()[0];
+                String name = (String) invocation.getArguments()[1];
+                if(loader == null) {
+                    loader = ClassLoader.getSystemClassLoader();
+                }
+
+                return loader.getResourceAsStream(name);
+            }
+        });
+    }
 
     @Test
     public void weaving() throws Exception {
@@ -91,12 +130,12 @@ public class ASMAspectWeaverTest {
             public Class<?> loadClass(String name) throws ClassNotFoundException {
                 if (name.equals(originalName)) {
                     try {
-                        final ClassReader cr = new ClassReader(getClass().getResourceAsStream("/" + name.replace('.', '/') + ".class"));
+                        final ClassReader cr = new ClassReader(getClass().getResourceAsStream("/" + JavaAssistUtils.javaNameToJvmName(name) + ".class"));
                         final ClassNode classNode = new ClassNode();
                         cr.accept(classNode, 0);
 
-                        final ASMClassNodeAdapter sourceClassNode = new ASMClassNodeAdapter(defaultClassLoader, classNode);
-                        final ASMClassNodeAdapter adviceClassNode = ASMClassNodeAdapter.get(defaultClassLoader, aspectName.replace('.', '/'));
+                        final ASMClassNodeAdapter sourceClassNode = new ASMClassNodeAdapter(pluginContext, defaultClassLoader, classNode);
+                        final ASMClassNodeAdapter adviceClassNode = ASMClassNodeAdapter.get(pluginContext, defaultClassLoader, JavaAssistUtils.javaNameToJvmName(aspectName));
 
                         final ASMAspectWeaver aspectWeaver = new ASMAspectWeaver();
                         aspectWeaver.weaving(sourceClassNode, adviceClassNode);
@@ -104,7 +143,7 @@ public class ASMAspectWeaverTest {
                         final ClassWriter cw = new ClassWriter(0);
                         classNode.accept(cw);
                         final byte[] bytecode = cw.toByteArray();
-                        CheckClassAdapter.verify(new ClassReader(bytecode), false, new PrintWriter(System.out));
+//                        CheckClassAdapter.verify(new ClassReader(bytecode), false, new PrintWriter(System.out));
 
                         return super.defineClass(name, bytecode, 0, bytecode.length);
                     } catch (Exception ex) {

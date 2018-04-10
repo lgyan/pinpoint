@@ -17,15 +17,19 @@
 
 package com.navercorp.pinpoint.collector.cluster.connection;
 
+import com.navercorp.pinpoint.collector.util.Address;
+import com.navercorp.pinpoint.collector.util.DefaultAddress;
+import com.navercorp.pinpoint.common.util.Assert;
 import com.navercorp.pinpoint.rpc.MessageListener;
 import com.navercorp.pinpoint.rpc.PinpointSocket;
 import com.navercorp.pinpoint.rpc.cluster.ClusterOption;
 import com.navercorp.pinpoint.rpc.cluster.Role;
 import com.navercorp.pinpoint.rpc.common.SocketStateCode;
 import com.navercorp.pinpoint.rpc.packet.HandshakeResponseCode;
-import com.navercorp.pinpoint.rpc.packet.PingPacket;
+import com.navercorp.pinpoint.rpc.packet.PingPayloadPacket;
 import com.navercorp.pinpoint.rpc.packet.RequestPacket;
 import com.navercorp.pinpoint.rpc.packet.SendPacket;
+import com.navercorp.pinpoint.rpc.server.ChannelFilter;
 import com.navercorp.pinpoint.rpc.server.PinpointServer;
 import com.navercorp.pinpoint.rpc.server.PinpointServerAcceptor;
 import com.navercorp.pinpoint.rpc.server.ServerMessageListener;
@@ -39,12 +43,13 @@ import java.net.SocketAddress;
 import java.util.Map;
 
 /**
- * @Author Taejin Koo
+ * @author Taejin Koo
  */
 public class CollectorClusterAcceptor implements CollectorClusterConnectionProvider {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
+    private final String name;
     private final InetSocketAddress bindAddress;
     private final CollectorClusterConnectionRepository clusterSocketRepository;
 
@@ -53,18 +58,19 @@ public class CollectorClusterAcceptor implements CollectorClusterConnectionProvi
     private final CollectorClusterConnectionOption option;
 
     public CollectorClusterAcceptor(CollectorClusterConnectionOption option, InetSocketAddress bindAddress, CollectorClusterConnectionRepository clusterSocketRepository) {
-        this.option = option;
-        this.bindAddress = bindAddress;
-        this.clusterSocketRepository = clusterSocketRepository;
+        this.name = ClassUtils.simpleClassName(this);
+        this.option = Assert.requireNonNull(option, "option must not be null");
+        this.bindAddress = Assert.requireNonNull(bindAddress, "bindAddress must not be null");
+        this.clusterSocketRepository = Assert.requireNonNull(clusterSocketRepository, "clusterSocketRepository must not be null");
     }
 
     @Override
     public void start() {
-        logger.info("{} initialization started.", ClassUtils.simpleClassName(this));
+        logger.info("{} initialization started.", name);
 
         ClusterOption clusterOption = new ClusterOption(true, option.getClusterId(), Role.ROUTER);
 
-        PinpointServerAcceptor serverAcceptor = new PinpointServerAcceptor(clusterOption);
+        PinpointServerAcceptor serverAcceptor = new PinpointServerAcceptor(clusterOption, ChannelFilter.BYPASS);
         serverAcceptor.setMessageListener(new ClusterServerMessageListener(option.getClusterId(), option.getRouteMessageHandler()));
         serverAcceptor.setServerStreamChannelMessageListener(option.getRouteStreamMessageHandler());
         serverAcceptor.addStateChangeEventHandler(new WebClusterServerChannelStateChangeHandler());
@@ -72,18 +78,18 @@ public class CollectorClusterAcceptor implements CollectorClusterConnectionProvi
 
         this.serverAcceptor = serverAcceptor;
 
-        logger.info("{} initialization completed.", ClassUtils.simpleClassName(this));
+        logger.info("{} initialization completed.", name);
     }
 
     @Override
     public void stop() {
-        logger.info("{} destroying started.", ClassUtils.simpleClassName(this));
+        logger.info("{} destroying started.", name);
 
         if (serverAcceptor != null) {
             serverAcceptor.close();
         }
 
-        logger.info("{} destroying completed.", ClassUtils.simpleClassName(this));
+        logger.info("{} destroying completed.", name);
     }
 
     class ClusterServerMessageListener implements ServerMessageListener {
@@ -91,9 +97,9 @@ public class CollectorClusterAcceptor implements CollectorClusterConnectionProvi
         private final String clusterId;
         private final MessageListener routeMessageListener;
 
-        public ClusterServerMessageListener(String clusterId, MessageListener routeMessageListene) {
+        public ClusterServerMessageListener(String clusterId, MessageListener routeMessageListener) {
             this.clusterId = clusterId;
-            this.routeMessageListener = routeMessageListene;
+            this.routeMessageListener = routeMessageListener;
         }
 
         @Override
@@ -116,8 +122,8 @@ public class CollectorClusterAcceptor implements CollectorClusterConnectionProvi
         }
 
         @Override
-        public void handlePing(PingPacket pingPacket, PinpointServer pinpointServer) {
-            logger.info("handle ping {}", pingPacket);
+        public void handlePing(PingPayloadPacket pingPacket, PinpointServer pinpointServer) {
+            logger.info("ping received packet:{}, remote:{}", pingPacket, pinpointServer);
         }
 
     }
@@ -127,20 +133,29 @@ public class CollectorClusterAcceptor implements CollectorClusterConnectionProvi
         @Override
         public void eventPerformed(PinpointServer pinpointServer, SocketStateCode stateCode) throws Exception {
             if (stateCode.isRunDuplex()) {
-                SocketAddress remoteAddress = pinpointServer.getRemoteAddress();
-                clusterSocketRepository.putIfAbsent(remoteAddress, pinpointServer);
+                Address address = getAddress(pinpointServer);
+                clusterSocketRepository.putIfAbsent(address, pinpointServer);
                 return;
             } else if (stateCode.isClosed()) {
-                SocketAddress remoteAddress = pinpointServer.getRemoteAddress();
-                clusterSocketRepository.remove(remoteAddress);
+                Address address = getAddress(pinpointServer);
+                clusterSocketRepository.remove(address);
                 return;
             }
         }
 
+        private Address getAddress(PinpointServer pinpointServer) {
+            final SocketAddress remoteAddress = pinpointServer.getRemoteAddress();
+            if (!(remoteAddress instanceof InetSocketAddress)) {
+                throw new IllegalStateException("unexpected address type:" + remoteAddress);
+            }
+            InetSocketAddress inetSocketAddress = (InetSocketAddress) remoteAddress;
+            return new DefaultAddress(inetSocketAddress.getHostString(), inetSocketAddress.getPort());
+        }
+
         @Override
         public void exceptionCaught(PinpointServer pinpointServer, SocketStateCode stateCode, Throwable e) {
-
         }
+
     }
 
 }

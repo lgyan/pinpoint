@@ -19,10 +19,11 @@ package com.navercorp.pinpoint.collector.receiver;
 import org.apache.thrift.TBase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import com.navercorp.pinpoint.collector.manage.HandlerManager;
 import com.navercorp.pinpoint.thrift.dto.TResult;
+
+import java.util.Objects;
 
 /**
  * @author Taejin Koo
@@ -33,30 +34,26 @@ public class DispatchHandlerWrapper implements DispatchHandler {
     
     private final DispatchHandler delegate;
 
-    @Autowired
-    private HandlerManager handlerManager;
+    private final HandlerManager handlerManager;
 
-    public DispatchHandlerWrapper(DispatchHandler dispatchHandler) {
-        if (dispatchHandler == null) {
-            throw new NullPointerException("dispatchHandler may note be null.");
-        }
-        this.delegate = dispatchHandler;
+    public DispatchHandlerWrapper(DispatchHandler delegate, HandlerManager handlerManager) {
+        this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
+        this.handlerManager = Objects.requireNonNull(handlerManager, "handlerManager must not be null");
     }
 
     @Override
     public void dispatchSendMessage(TBase<?, ?> tBase) {
-        if (checkAvaiable()) {
+        if (checkAvailable()) {
             this.delegate.dispatchSendMessage(tBase);
             return;
         }
 
         logger.debug("Handler is disabled. Skipping send message {}.", tBase);
-        return;
     }
 
     @Override
     public TBase dispatchRequestMessage(TBase<?, ?> tBase) {
-        if (checkAvaiable()) {
+        if (checkAvailable()) {
             return this.delegate.dispatchRequestMessage(tBase);
         }
 
@@ -67,11 +64,7 @@ public class DispatchHandlerWrapper implements DispatchHandler {
         return result;
     }
     
-    private boolean checkAvaiable() {
-        if (handlerManager == null) {
-            return true;
-        }
-        
+    private boolean checkAvailable() {
         if (handlerManager.isEnable()) {
             return true;
         }

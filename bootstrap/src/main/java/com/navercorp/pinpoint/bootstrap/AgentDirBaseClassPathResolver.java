@@ -17,7 +17,6 @@
 package com.navercorp.pinpoint.bootstrap;
 
 
-
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FilenameFilter;
@@ -41,17 +40,20 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
     private final BootLogger logger = BootLogger.getLogger(this.getClass().getName());
 
     static final String VERSION_PATTERN = "(-[0-9]+\\.[0-9]+\\.[0-9]+((\\-SNAPSHOT)|(-RC[0-9]+))?)?";
-    static final Pattern DEFAULT_AGENT_PATTERN = Pattern.compile("pinpoint-bootstrap" +VERSION_PATTERN + "\\.jar");
-    static final Pattern DEFAULT_AGENT_COMMONS_PATTERN = Pattern.compile("pinpoint-commons" + VERSION_PATTERN + "\\.jar");
-    static final Pattern DEFAULT_AGENT_CORE_PATTERN = Pattern.compile("pinpoint-bootstrap-core" + VERSION_PATTERN + "\\.jar");
-    static final Pattern DEFAULT_AGENT_CORE_OPTIONAL_PATTERN = Pattern.compile("pinpoint-bootstrap-core-optional" + VERSION_PATTERN + "\\.jar");
+
+    static final Pattern DEFAULT_AGENT_PATTERN = compile("pinpoint-bootstrap" + VERSION_PATTERN + "\\.jar");
+    static final Pattern DEFAULT_AGENT_COMMONS_PATTERN = compile("pinpoint-commons" + VERSION_PATTERN + "\\.jar");
+    static final Pattern DEFAULT_AGENT_CORE_PATTERN = compile("pinpoint-bootstrap-core" + VERSION_PATTERN + "\\.jar");
+    static final Pattern DEFAULT_AGENT_CORE_OPTIONAL_PATTERN = compile("pinpoint-bootstrap-core-optional" + VERSION_PATTERN + "\\.jar");
+    static final Pattern DEFAULT_ANNOTATIONS = compile("pinpoint-annotations" + VERSION_PATTERN + "\\.jar");
 
     private final Pattern agentPattern;
     private final Pattern agentCommonsPattern;
     private final Pattern agentCorePattern;
     private final Pattern agentCoreOptionalPattern;
+    private final Pattern annotationsPattern;
 
-    private String classPath;
+    private final String classPath;
 
     private String agentJarName;
     private String agentJarFullPath;
@@ -61,24 +63,28 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
     private String pinpointCommonsJar;
     private String bootStrapCoreJar;
     private String bootStrapCoreOptionalJar;
+    private String annotationsJar;
 
     private BootstrapJarFile bootstrapJarFile;
 
-    public AgentDirBaseClassPathResolver() {
-        this(getClassPathFromSystemProperty());
+    private static Pattern compile(String regex) {
+        return Pattern.compile(regex);
     }
 
-
     public AgentDirBaseClassPathResolver(String classPath) {
+        if (classPath == null) {
+            throw new NullPointerException("classPath must not be null");
+        }
         this.classPath = classPath;
         this.agentPattern = DEFAULT_AGENT_PATTERN;
         this.agentCommonsPattern = DEFAULT_AGENT_COMMONS_PATTERN;
         this.agentCorePattern = DEFAULT_AGENT_CORE_PATTERN;
         this.agentCoreOptionalPattern = DEFAULT_AGENT_CORE_OPTIONAL_PATTERN;
+        this.annotationsPattern = DEFAULT_ANNOTATIONS;
         this.fileExtensionList = getDefaultFileExtensionList();
     }
 
-    public List<String> getDefaultFileExtensionList() {
+    List<String> getDefaultFileExtensionList() {
         List<String> extensionList = new ArrayList<String>();
         extensionList.add("jar");
         extensionList.add("xml");
@@ -92,6 +98,7 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
         this.agentCommonsPattern = DEFAULT_AGENT_COMMONS_PATTERN;
         this.agentCorePattern = DEFAULT_AGENT_CORE_PATTERN;
         this.agentCoreOptionalPattern = DEFAULT_AGENT_CORE_OPTIONAL_PATTERN;
+        this.annotationsPattern = DEFAULT_ANNOTATIONS;
         this.fileExtensionList = getDefaultFileExtensionList();
     }
 
@@ -146,12 +153,17 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
             }
         }
 
+        // 5th find annotations.jar : optional dependency
+        final String annotationsJar = getAnnotationsJar();
+        if (annotationsJar == null) {
+            logger.info("pinpoint-annotations-x.x.x(-SNAPSHOT).jar not found");
+        } else {
+            JarFile jarFile = getJarFile(annotationsJar);
+            bootstrapJarFile.append(jarFile);
+        }
+
         this.bootstrapJarFile = bootstrapJarFile;
         return true;
-    }
-
-    public void setClassPathFromSystemProperty() {
-        this.classPath = getClassPathFromSystemProperty();
     }
 
     @Override
@@ -159,9 +171,6 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
         return bootstrapJarFile;
     }
 
-    public static String getClassPathFromSystemProperty() {
-        return System.getProperty("java.class.path");
-    }
 
     boolean findAgentJar() {
         Matcher matcher = agentPattern.matcher(classPath);
@@ -184,9 +193,10 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
         logger.info("Agent canonical-path:" + agentDirPath);
 
 
-        this.pinpointCommonsJar = findFromBootDir("pinpoint-commons", agentCommonsPattern);
-        this.bootStrapCoreJar = findFromBootDir("bootStrapCore", agentCorePattern);
-        this.bootStrapCoreOptionalJar = findFromBootDir("bootStrapCoreOptional", agentCoreOptionalPattern);
+        this.pinpointCommonsJar = findFromBootDir("pinpoint-commons.jar", agentCommonsPattern);
+        this.bootStrapCoreJar = findFromBootDir("pinpoint-bootstrap-core.jar", agentCorePattern);
+        this.bootStrapCoreOptionalJar = findFromBootDir("pinpoint-bootstrap-core-optional.jar", agentCoreOptionalPattern);
+        this.annotationsJar = findFromBootDir("pinpoint-annotations.jar", annotationsPattern);
         return true;
     }
 
@@ -206,8 +216,8 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
 
     private String findFromBootDir(final String name, final Pattern pattern) {
         String bootDirPath = agentDirPath + File.separator + "boot";
-        File[] files = listFiles(name, pattern, bootDirPath);
-        if (files== null || files.length == 0) {
+        final File[] files = listFiles(name, pattern, bootDirPath);
+        if (isEmpty(files)) {
             logger.info(name + " not found.");
             return null;
         } else if (files.length == 1) {
@@ -217,6 +227,10 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
             logger.info("too many " + name + " found. " + Arrays.toString(files));
             return null;
         }
+    }
+
+    private boolean isEmpty(File[] files) {
+        return files == null || files.length == 0;
     }
 
     private File[] listFiles(final String name, final Pattern pattern, String bootDirPath) {
@@ -248,6 +262,10 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
     @Override
     public String getBootStrapCoreOptionalJar() {
         return bootStrapCoreOptionalJar;
+    }
+
+    public String getAnnotationsJar() {
+        return annotationsJar;
     }
 
     private String parseAgentJar(Matcher matcher) {
@@ -304,7 +322,7 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
             logger.warn(agentLibPath + " not Directory");
             return Collections.emptyList();
         }
-        final List<URL> jarURLList =  new ArrayList<URL>();
+        final List<URL> jarURLList = new ArrayList<URL>();
 
         final File[] findJarList = findJar(libDir);
         if (findJarList != null) {
@@ -332,51 +350,52 @@ public class AgentDirBaseClassPathResolver implements ClassPathResolver {
 
         return jarURLList;
     }
-    
+
     @Override
-    public URL[] resolvePlugins() {
+    public List<String> resolvePlugins() {
         final File file = new File(getAgentPluginPath());
-        
+
         if (!file.exists()) {
             logger.warn(file + " not found");
-            return new URL[0];
+            return Collections.emptyList();
         }
-        
+
         if (!file.isDirectory()) {
             logger.warn(file + " is not a directory");
-            return new URL[0];
+            return Collections.emptyList();
         }
-        
-        
+
+
         final File[] jars = file.listFiles(new FilenameFilter() {
-            
+
             @Override
             public boolean accept(File dir, String name) {
-                return name.endsWith(".jar");
+                  return name.endsWith(".jar");
             }
         });
 
-        if (jars == null || jars.length == 0) {
-            return new URL[0];
-        }
-        
-        final URL[] urls = new URL[jars.length];
-        
-        
-        for (int i = 0; i < jars.length; i++) {
-            try {
-                urls[i] = jars[i].toURI().toURL();
-            } catch (MalformedURLException e) {
-                // TODO have to change to PinpointException AFTER moving the exception to pinpoint-common
-                throw new RuntimeException("Fail to load plugin jars", e);
-            }
+        if (isEmpty(jars)) {
+            return Collections.emptyList();
         }
 
+        List<String> pluginFileList = filterReadPermission(jars);
+        for (String pluginJar : pluginFileList) {
+            logger.info("Found plugins:" + pluginJar);
+        }
+        return pluginFileList;
+    }
+
+    private List<String> filterReadPermission(File[] jars) {
+        List<String> result = new ArrayList<String>();
         for (File pluginJar : jars) {
-            logger.info("Found plugins: " + pluginJar.getPath());
-        }
+            if (!pluginJar.canRead()) {
+                logger.info("File '" + pluginJar + "' cannot be read");
+                continue;
+            }
 
-        return urls;
+            result.add(pluginJar.getPath());
+        }
+        return result;
     }
 
     private URL toURI(File file) {

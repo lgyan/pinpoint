@@ -16,6 +16,9 @@
 
 package com.navercorp.pinpoint.bootstrap.config;
 
+import com.navercorp.pinpoint.common.annotations.InterfaceAudience;
+import com.navercorp.pinpoint.common.annotations.VisibleForTesting;
+
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +26,7 @@ import java.util.Map;
  * @author Woonduk Kang(emeroad)
  */
 public interface ProfilerConfig {
+
     int getInterceptorRegistrySize();
 
     String getCollectorSpanServerIp();
@@ -45,17 +49,37 @@ public interface ProfilerConfig {
 
     String getStatDataSenderSocketType();
 
+    String getStatDataSenderTransportType();
+
     int getSpanDataSenderWriteQueueSize();
 
     int getSpanDataSenderSocketSendBufferSize();
 
     boolean isTcpDataSenderCommandAcceptEnable();
 
+    boolean isTcpDataSenderCommandActiveThreadEnable();
+
+    boolean isTcpDataSenderCommandActiveThreadCountEnable();
+
+    boolean isTcpDataSenderCommandActiveThreadDumpEnable();
+
+    boolean isTcpDataSenderCommandActiveThreadLightDumpEnable();
+
     boolean isTraceAgentActiveThread();
+
+    boolean isTraceAgentDataSource();
+
+    int getDataSourceTraceLimitSize();
+
+    boolean isDeadlockMonitorEnable();
+
+    long getDeadlockMonitorInterval();
 
     int getSpanDataSenderSocketTimeout();
 
     String getSpanDataSenderSocketType();
+
+    String getSpanDataSenderTransportType();
 
     int getSpanDataSenderChunkSize();
 
@@ -77,13 +101,21 @@ public interface ProfilerConfig {
 
     int getIoBufferingBufferSize();
 
-    int getProfileJvmCollectInterval();
-
     String getProfilerJvmVendorName();
 
-    boolean isProfilerJvmCollectDetailedMetrics();
+    String getProfilerOSName();
+
+    int getProfileJvmStatCollectIntervalMs();
+
+    int getProfileJvmStatBatchSendCount();
+
+    boolean isProfilerJvmStatCollectDetailedMetrics();
 
     long getAgentInfoSendRetryInterval();
+
+    @InterfaceAudience.Private
+    @VisibleForTesting
+    boolean getStaticResourceCleanup();
 
 
     Filter<String> getProfilableClassFilter();
@@ -99,6 +131,18 @@ public interface ProfilerConfig {
     boolean isPropagateInterceptorException();
 
     String getProfileInstrumentEngine();
+
+    boolean isSupportLambdaExpressions();
+
+    boolean isInstrumentMatcherEnable();
+
+    InstrumentMatcherCacheConfig getInstrumentMatcherCacheConfig();
+
+    boolean isProxyHttpHeaderEnable();
+
+    List<String> getHttpStatusCodeErrors();
+
+    String getInjectionModuleFactoryClazzName();
 
     String readString(String propertyName, String defaultValue);
 
