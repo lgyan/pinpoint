@@ -17,6 +17,7 @@
 package com.navercorp.pinpoint.bootstrap;
 
 import java.lang.instrument.Instrumentation;
+import java.net.URL;
 import java.util.List;
 import java.util.Map;
 import java.util.jar.JarFile;
@@ -39,6 +40,14 @@ public class PinpointBootStrap {
             agentArgs = "";
         }
         logger.info(ProductInfo.NAME + " agentArgs:" + agentArgs);
+        logger.info("classLoader:" + PinpointBootStrap.class.getClassLoader());
+        logger.info("contextClassLoader:" + Thread.currentThread().getContextClassLoader());
+        if (Object.class.getClassLoader() != PinpointBootStrap.class.getClassLoader()) {
+            final URL location = LocationUtils.getLocation(PinpointBootStrap.class);
+            logger.warn("Invalid pinpoint-bootstrap.jar:" + location);
+            return;
+        }
+
 
         final boolean success = STATE.start();
         if (!success) {
@@ -60,13 +69,44 @@ public class PinpointBootStrap {
         BootstrapJarFile bootstrapJarFile = classPathResolver.getBootstrapJarFile();
         appendToBootstrapClassLoader(instrumentation, bootstrapJarFile);
 
+        ClassLoader parentClassLoader = getParentClassLoader();
+        if (ModuleUtils.isModuleSupported()) {
+            logger.info("java9 module detected");
+            logger.info("ModuleBootLoader start");
+            ModuleBootLoader moduleBootLoader = new ModuleBootLoader(instrumentation, parentClassLoader);
+            moduleBootLoader.loadModuleSupport();
 
-        PinpointStarter bootStrap = new PinpointStarter(agentArgsMap, bootstrapJarFile, classPathResolver, instrumentation);
+            // for development option
+            // avoid java.sql.Date not found
+            // will be removed future release
+            if ("platform".equalsIgnoreCase(System.getProperty("pinpoint.dev.option.agentClassLoader"))) {
+                parentClassLoader = moduleBootLoader.getPlatformClassLoader();
+                logger.info("override parentClassLoader:" + parentClassLoader);
+            }
+        }
+
+        PinpointStarter bootStrap = new PinpointStarter(parentClassLoader, agentArgsMap, bootstrapJarFile, classPathResolver, instrumentation);
         if (!bootStrap.start()) {
             logPinpointAgentLoadFail();
         }
 
     }
+
+
+    private static ClassLoader getParentClassLoader() {
+        final ClassLoader classLoader = getPinpointBootStrapClassLoader();
+        if (classLoader == Object.class.getClassLoader()) {
+            logger.info("parentClassLoader:BootStrapClassLoader ref{}" + classLoader );
+        } else {
+            logger.info("parentClassLoader:" + classLoader);
+        }
+        return classLoader;
+    }
+
+    private static ClassLoader getPinpointBootStrapClassLoader() {
+        return PinpointBootStrap.class.getClassLoader();
+    }
+
 
     private static Map<String, String> argsToMap(String agentArgs) {
         ArgsParser argsParser = new ArgsParser();

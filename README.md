@@ -7,7 +7,7 @@
 
 **Visit [our official web site](http://naver.github.io/pinpoint/) for more information and [Latest updates on Pinpoint](https://naver.github.io/pinpoint/news.html)**  
 
-The current stable version is [v1.7.2](https://github.com/naver/pinpoint/releases/latest).
+The current stable version is [v1.7.3](https://github.com/naver/pinpoint/releases/latest).
 
 **Pinpoint** is an APM (Application Performance Management) tool for large-scale distributed systems written in Java. Inspired by [Dapper](http://research.google.com/pubs/pub36356.html "Google Dapper"), Pinpoint provides a solution to help analyze the overall structure of the system and how components within them are interconnected by tracing transactions across distributed applications.
 
@@ -66,6 +66,7 @@ Pinpoint Version | Agent | Collector | Web
 1.5.x | 6-8 | 7+ | 7+
 1.6.x | 6-8 | 7+ | 7+
 1.7.x | 6-8 | 8+ | 8+
+1.8.x | 6-8<br> 9+(Experimental) | 8+ | 8+ 
 
 HBase compatibility table:
 
@@ -76,6 +77,24 @@ Pinpoint Version | HBase 0.94.x | HBase 0.98.x | HBase 1.0.x | HBase 1.1.x | HBa
 1.5.x | no | not tested | yes | not tested | not tested
 1.6.x | no | not tested | not tested | not tested | yes
 1.7.x | no | not tested | not tested | not tested | yes
+1.8.x | no | not tested | not tested | not tested | yes
+
+Agent - Collector compatibility table:
+
+Agent Version | Collector 1.0.x | Collector 1.1.x | Collector 1.5.x | Collector 1.6.x | Collector 1.7.x | Collector 1.8.x
+------------- | --------------- | --------------- | --------------- | --------------- | --------------- | ---------------
+1.0.x | yes | yes | yes | yes | yes | yes
+1.1.x | not tested | yes | yes | yes | yes | yes
+1.5.x | no | no | yes | yes | yes | yes
+1.6.x | no | no | not tested | yes | yes | yes
+1.7.x | no | no | no | no | yes | yes
+1.8.x | no | no | no | no | no | yes
+
+Flink compatibility table:
+
+Pinpoint Version | flink 1.3.X | flink 1.4.X
+---------------- | ----------- | ----------- 
+1.7.x | yes | no |
 
 ## User Group
 For Q/A and discussion [here](https://groups.google.com/forum/#!forum/pinpoint_user).
